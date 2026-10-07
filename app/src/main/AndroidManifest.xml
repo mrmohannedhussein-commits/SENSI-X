@@ -4,6 +4,7 @@
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="SENSI-X"
+        android:supportsRtl="true"
         android:theme="@style/Theme.SensiX">
         <activity
             android:name=".MainActivity"
