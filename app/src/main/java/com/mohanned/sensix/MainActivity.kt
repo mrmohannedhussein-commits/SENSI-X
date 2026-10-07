@@ -38,8 +38,12 @@ class MainActivity : Activity() {
     private val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
     private val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
 
-    private val scopes = listOf(
+    private val scopesEn = listOf(
         "No scope (TPP)", "No scope (FPP)", "Red dot / Holo",
+        "2x", "3x", "4x", "6x", "8x"
+    )
+    private val scopesAr = listOf(
+        "بدون منظار (TPP)", "بدون منظار (FPP)", "ريد دوت / هولو",
         "2x", "3x", "4x", "6x", "8x"
     )
     private val camBase = listOf(100, 95, 85, 55, 40, 32, 22, 16)
@@ -48,6 +52,9 @@ class MainActivity : Activity() {
 
     private lateinit var root: FrameLayout
     private val handler = Handler(Looper.getMainLooper())
+    private val prefs by lazy { getSharedPreferences("sensix", Context.MODE_PRIVATE) }
+    private var ar = true
+    private var redraw: () -> Unit = {}
     private var style = 0
     private var fingers = 4
     private var tab = 0
@@ -62,12 +69,15 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ar = prefs.getBoolean("ar", true)
         root = FrameLayout(this)
         root.setBackgroundColor(BG)
         setContentView(root)
         readDevice()
         showSplash()
     }
+
+    private fun s(a: String, e: String): String = if (ar) a else e
 
     @Suppress("DEPRECATION")
     private fun readDevice() {
@@ -127,12 +137,31 @@ class MainActivity : Activity() {
     }
 
     private fun screen(): LinearLayout {
+        handler.removeCallbacksAndMessages(null)
         root.removeAllViews()
+        val dir = if (ar) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
+        root.layoutDirection = dir
         val l = LinearLayout(this)
         l.orientation = LinearLayout.VERTICAL
+        l.layoutDirection = dir
         l.setPadding(dp(20), dp(24), dp(20), dp(20))
         root.addView(l, FrameLayout.LayoutParams(MATCH, MATCH))
+        langButton(l)
         return l
+    }
+
+    private fun langButton(l: LinearLayout) {
+        val b = text(s("English", "عربي"), 14f, GOLD, true)
+        b.background = shape(Color.TRANSPARENT, 16, GOLD)
+        b.setPadding(dp(14), dp(6), dp(14), dp(6))
+        b.setOnClickListener {
+            ar = !ar
+            prefs.edit().putBoolean("ar", ar).apply()
+            redraw()
+        }
+        val p = LinearLayout.LayoutParams(WRAP, WRAP)
+        p.gravity = Gravity.END
+        l.addView(b, p)
     }
 
     private fun button(s: String, filled: Boolean, onClick: () -> Unit): TextView {
@@ -171,10 +200,10 @@ class MainActivity : Activity() {
         return r
     }
 
-    private fun copy(s: String) {
+    private fun copy(v: String) {
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        cm.setPrimaryClip(ClipData.newPlainText("sensix", s))
-        Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show()
+        cm.setPrimaryClip(ClipData.newPlainText("sensix", v))
+        Toast.makeText(this, s("تم النسخ", "Copied"), Toast.LENGTH_SHORT).show()
     }
 
     private fun mult(): Double {
@@ -193,6 +222,7 @@ class MainActivity : Activity() {
     private fun scaled(base: Int): Int = (base * mult()).roundToInt().coerceIn(1, 300)
 
     private fun showSplash() {
+        redraw = { showSplash() }
         val l = screen()
         l.gravity = Gravity.CENTER_HORIZONTAL
         l.addView(View(this), LinearLayout.LayoutParams(MATCH, 0, 1f))
@@ -203,38 +233,46 @@ class MainActivity : Activity() {
         title.gravity = Gravity.CENTER
         title.letterSpacing = 0.15f
         l.put(title, 16)
-        val sub = text("Sensitivity & controls for your phone", 14f, MUTED)
+        val sub = text(
+            s("الحساسية والتحكم المناسبين لجوالك", "Sensitivity & controls for your phone"),
+            14f, MUTED
+        )
         sub.gravity = Gravity.CENTER
         l.put(sub, 6)
-        l.put(button("ابدأ  |  START", true) { showScan() }, 36)
+        l.put(button(s("ابدأ", "START"), true) { showScan() }, 36)
         l.addView(View(this), LinearLayout.LayoutParams(MATCH, 0, 1f))
-        val dev = text("Developed by MOHANNED", 13f, MUTED)
+        val dev = text(s("تطوير: MOHANNED", "Developed by MOHANNED"), 13f, MUTED)
         dev.gravity = Gravity.CENTER
         l.put(dev)
-        val dis = text("Unofficial app. Results are suggestions.", 11f, 0xFF7A6D40.toInt())
+        val dis = text(
+            s("تطبيق غير رسمي. النتائج مجرد اقتراحات.", "Unofficial app. Results are suggestions."),
+            11f, 0xFF7A6D40.toInt()
+        )
         dis.gravity = Gravity.CENTER
         l.put(dis, 4)
     }
 
     private fun showScan() {
+        redraw = { showScan() }
         val l = screen()
-        l.put(text("Scanning your device...", 22f, GOLD, true))
+        l.put(text(s("جاري فحص جهازك...", "Scanning your device..."), 22f, GOLD, true), 8)
         val card = LinearLayout(this)
         card.orientation = LinearLayout.VERTICAL
         card.background = shape(CARD, 14, LINE)
         card.setPadding(dp(16), dp(12), dp(16), dp(12))
         l.put(card, 20)
-        val cont = button("Continue", true) { showSetup() }
+        val cont = button(s("متابعة", "Continue"), true) { showSetup() }
         cont.visibility = View.GONE
         l.put(cont, 24)
         val rows = listOf(
-            "Device" to deviceName,
+            s("الجهاز", "Device") to deviceName,
             "Android" to Build.VERSION.RELEASE,
             "RAM" to "$ramGb GB",
-            "Screen" to "$wpx x $hpx",
-            "Refresh rate" to "$hz Hz",
-            "Density" to "$dpi DPI",
-            "Gyroscope" to if (hasGyro) "Supported" else "Not available"
+            s("الشاشة", "Screen") to "$wpx x $hpx",
+            s("معدل التحديث", "Refresh rate") to "$hz Hz",
+            s("الكثافة", "Density") to "$dpi DPI",
+            s("الجيروسكوب", "Gyroscope") to
+                if (hasGyro) s("مدعوم", "Supported") else s("غير متوفر", "Not available")
         )
         rows.forEachIndexed { i, r ->
             handler.postDelayed({
@@ -247,18 +285,19 @@ class MainActivity : Activity() {
     }
 
     private fun showSetup() {
+        redraw = { showSetup() }
         val l = screen()
-        l.put(text("Your play style", 22f, GOLD, true))
+        l.put(text(s("أسلوب لعبك", "Your play style"), 22f, GOLD, true), 8)
         val styleRow = LinearLayout(this)
         styleRow.orientation = LinearLayout.HORIZONTAL
-        listOf("Aggressive", "Defensive").forEachIndexed { i, s ->
-            styleRow.addView(chip(s, style == i) {
+        listOf(s("هجومي", "Aggressive"), s("دفاعي", "Defensive")).forEachIndexed { i, n ->
+            styleRow.addView(chip(n, style == i) {
                 style = i
                 showSetup()
             }, weightLp())
         }
         l.put(styleRow, 14)
-        l.put(text("Number of fingers", 22f, GOLD, true), 28)
+        l.put(text(s("عدد الأصابع", "Number of fingers"), 22f, GOLD, true), 28)
         val fRow = LinearLayout(this)
         fRow.orientation = LinearLayout.HORIZONTAL
         listOf(2, 3, 4, 5, 6).forEach { n ->
@@ -268,23 +307,26 @@ class MainActivity : Activity() {
             }, weightLp())
         }
         l.put(fRow, 14)
-        l.put(button("Show my sensitivity", true) {
+        l.put(button(s("اعرض الحساسية", "Show my sensitivity"), true) {
             tab = 0
             showResults()
         }, 36)
     }
 
     private fun showResults() {
+        redraw = { showResults() }
         val l = screen()
-        l.put(text(deviceName, 20f, GOLD, true))
-        val names = if (hasGyro) {
-            listOf("Camera", "ADS", "Gyro", "Controls")
-        } else {
-            listOf("Camera", "ADS", "Controls")
-        }
+        l.put(text(deviceName, 20f, GOLD, true), 8)
+        val ids = if (hasGyro) listOf(0, 1, 2, 3) else listOf(0, 1, 3)
         val tabs = LinearLayout(this)
         tabs.orientation = LinearLayout.HORIZONTAL
-        names.forEachIndexed { i, n ->
+        ids.forEachIndexed { i, id ->
+            val n = when (id) {
+                0 -> s("الكاميرا", "Camera")
+                1 -> s("التصويب", "ADS")
+                2 -> s("الجيروسكوب", "Gyro")
+                else -> s("التحكم", "Controls")
+            }
             tabs.addView(chip(n, tab == i) {
                 tab = i
                 showResults()
@@ -300,9 +342,9 @@ class MainActivity : Activity() {
         lp.topMargin = dp(10)
         l.addView(sv, lp)
 
-        val kind = names[tab]
+        val kind = ids[tab.coerceIn(0, ids.size - 1)]
         val lines = ArrayList<String>()
-        if (kind == "Controls") {
+        if (kind == 3) {
             val fire = when (fingers) {
                 2 -> 110
                 3 -> 100
@@ -312,12 +354,12 @@ class MainActivity : Activity() {
             } + (if (style == 0) 5 else 0) + (if (inches < 6.0) 5 else 0)
             val factor = if (style == 0) 0.95 else 1.0
             val sdpi = ((dpi * factor) / 10).roundToInt() * 10
-            val styleName = if (style == 0) "Aggressive" else "Defensive"
+            val styleName = if (style == 0) s("هجومي", "Aggressive") else s("دفاعي", "Defensive")
             val items = listOf(
-                "Fire button size" to "$fire%",
-                "Suggested DPI (optional)" to "$sdpi",
-                "Fingers" to "$fingers",
-                "Play style" to styleName
+                s("حجم زر الإطلاق", "Fire button size") to "$fire%",
+                s("DPI المقترح (اختياري)", "Suggested DPI (optional)") to "$sdpi",
+                s("عدد الأصابع", "Fingers") to "$fingers",
+                s("أسلوب اللعب", "Play style") to styleName
             )
             items.forEach { (a, b) ->
                 lines.add("$a: $b")
@@ -325,20 +367,24 @@ class MainActivity : Activity() {
             }
         } else {
             val base = when (kind) {
-                "Camera" -> camBase
-                "ADS" -> adsBase
+                0 -> camBase
+                1 -> adsBase
                 else -> gyroBase
             }
-            scopes.forEachIndexed { i, s ->
+            val names = if (ar) scopesAr else scopesEn
+            names.forEachIndexed { i, n ->
                 val v = scaled(base[i])
-                lines.add("$s: $v")
-                box.addView(row(s, "$v", GOLD) { copy("$v") })
+                lines.add("$n: $v")
+                box.addView(row(n, "$v", GOLD) { copy("$v") })
             }
         }
-        l.put(button("Copy all", false) { copy(lines.joinToString("\n")) }, 8)
-        val note = text("Suggestions only. Fine-tune in Training mode.", 11f, MUTED)
+        l.put(button(s("نسخ الكل", "Copy all"), false) { copy(lines.joinToString("\n")) }, 8)
+        val note = text(
+            s("اقتراحات فقط. عدّل بنفسك في وضع التدريب.", "Suggestions only. Fine-tune in Training mode."),
+            11f, MUTED
+        )
         note.gravity = Gravity.CENTER
         l.put(note, 8)
-        l.put(button("Back", false) { showSetup() }, 8)
+        l.put(button(s("رجوع", "Back"), false) { showSetup() }, 8)
     }
 }
